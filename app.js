@@ -24,19 +24,38 @@ io.use((socket, next) => {
     try {
       let decoded = jwt.verify(socket.handshake.query.token.split(' ')[1], cert, {algorithms: 'RS256'});
       socket.username = decoded.username;
+      socket.isAuthenticated = true;
     } catch (e) {
-      next(createError(409));
+      socket.isAuthenticated = false;
+      console.log('Caught error');
+      return next();
     }
-    return next();
+    next();
   } else {
-    next(new Error('Authentication error'));
+    socket.isAuthenticated = false;
+    next();
   }
 });
 
 io.on('connection', (socket) => {
-  console.log('connected');
-  socket.join(socket.username);
-  socket.emit('connect', { some: 'data'});
+  console.log(`${socket.username} connected`);
+  if (socket.isAuthenticated) {
+    socket.join(socket.username);
+  } else {
+    socket.emit('notAuthenticated');
+  }
+  socket.on('join', (msg) => {
+    socket.join(msg);
+    socket.tide = msg;
+    console.log(`${socket.username} joined channel ${socket.tide}`);
+  });
+  socket.on('message', (msg) => {
+    if (socket.isAuthenticated) {
+      io.to(socket.tide).emit('message', {msg: msg})
+    } else {
+      io.to(socket.id).emit('message', {msg: 'You must be logged in to contribute'})
+    }
+  });
   socket.on('disconnect', (reason) => {
     console.log('disconnected');
   })
@@ -83,8 +102,5 @@ app.use(function(err, req, res, next) {
   // render the error page
   res.status(err.status || 500);
 });
-
-
-
 
 module.exports = app;
