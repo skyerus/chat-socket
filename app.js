@@ -39,25 +39,36 @@ io.use((socket, next) => {
 
 io.on('connection', (socket) => {
   console.log(`${socket.username} connected`);
+
   if (socket.isAuthenticated) {
     socket.join(socket.username);
   } else {
     socket.emit('notAuthenticated');
   }
-  socket.on('join', (msg) => {
-    socket.join(msg);
-    socket.tide = msg;
-    console.log(`${socket.username} joined channel ${socket.tide}`);
+
+  socket.on('join', (data) => {
+    socket.join(data.room);
+    socket.tide = data.room;
+    io.to(socket.tide).emit('join', {user: data.user});
   });
+
   socket.on('message', (msg) => {
     if (socket.isAuthenticated) {
-      io.to(socket.tide).emit('message', {msg: msg})
+      io.to(socket.tide).emit('message', {
+        message: msg,
+        type: 'standard'
+      })
     } else {
-      io.to(socket.id).emit('message', {msg: 'You must be logged in to contribute'})
+      io.to(socket.id).emit('message', {
+        message: 'You must be logged in to contribute',
+        type: 'italic'
+      })
     }
   });
+
   socket.on('disconnect', (reason) => {
-    console.log('disconnected');
+    io.to(socket.tide).emit('leave', socket.username);
+    console.log(`${socket.username} disconnected`);
   })
 });
 
