@@ -54,8 +54,9 @@ io.on('connection', (socket) => {
   }
 
   socket.on('join', (data) => {
-    socket.join(data.room);
-    socket.tide = data.room;
+    console.log(`${socket.username} joined tide`);
+    socket.join(data.tide);
+    socket.tide = data.tide;
     if (socket.isAuthenticated) {
       redisClient.set(socket.id, JSON.stringify(data.user), () => {});
     }
@@ -92,6 +93,7 @@ io.on('connection', (socket) => {
   socket.on('message', (msg) => {
     if (socket.isAuthenticated) {
       io.to(socket.tide).emit('message', {
+        username: socket.username,
         message: msg,
         type: 'standard'
       })
@@ -104,8 +106,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', (reason) => {
-    io.to(socket.tide).emit('leave', socket.username);
     console.log(`${socket.username} disconnected`);
+    io.to(socket.tide).emit('leave', socket.username);
   })
 });
 
