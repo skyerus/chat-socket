@@ -10,6 +10,7 @@ var io = require('socket.io')(server);
 var axios = require('axios');
 var dotenv = require('dotenv').config();
 var jwt = require('jsonwebtoken');
+var cli = require('./services/cli.js')
 var fs = require('fs');
 var redis = require('redis');
 const cert = fs.readFileSync('./key/public.pem');
@@ -62,6 +63,47 @@ io.on('connection', (socket) => {
     }
     io.to(socket.tide).emit('join', {user: data.user});
 
+    emitParticipants();
+  });
+
+  socket.on('message', (msg) => {
+    console.log(msg);
+    if (socket.isAuthenticated) {
+      if (msg.charAt(0) === '!') {
+        io.to(socket.id).emit('message', {
+          username: socket.username,
+          message: msg,
+          type: 'italic'
+        })
+        let split = msg.split('!');
+        let response = cli.handle(split[1]);
+        io.to(socket.id).emit('message', {
+          message: response,
+          type: 'italic'
+        })
+      } else {
+        io.to(socket.tide).emit('message', {
+          username: socket.username,
+          message: msg,
+          type: 'standard'
+        })
+      }
+    } else {
+      io.to(socket.id).emit('message', {
+        message: 'You must be logged in to contribute',
+        type: 'italic'
+      })
+    }
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log(`${socket.username} disconnected`);
+    redisClient.del(socket.id);
+    emitParticipants();
+    io.to(socket.tide).emit('leave', socket.username);
+  })
+
+  let emitParticipants = function () {
     io.in(socket.tide).clients((error, clients) => {
       if (error) throw error;
 
@@ -84,33 +126,10 @@ io.on('connection', (socket) => {
       let userData = Promise.all(results);
 
       userData.then((data) => {
-        io.to(socket.id).emit('participants', data);
+        io.to(socket.tide).emit('participants', data);
       })
     });
-
-  });
-
-  socket.on('message', (msg) => {
-    console.log(msg);
-    if (socket.isAuthenticated) {
-      io.to(socket.tide).emit('message', {
-        username: socket.username,
-        message: msg,
-        type: 'standard'
-      })
-    } else {
-      io.to(socket.id).emit('message', {
-        message: 'You must be logged in to contribute',
-        type: 'italic'
-      })
-    }
-  });
-
-  socket.on('disconnect', (reason) => {
-    console.log(`${socket.username} disconnected`);
-    redisClient.del(socket.id);
-    io.to(socket.tide).emit('leave', socket.username);
-  })
+  }
 });
 
 
