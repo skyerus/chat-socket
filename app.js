@@ -11,7 +11,14 @@ var axios = require('axios');
 var dotenv = require('dotenv').config();
 var jwt = require('jsonwebtoken');
 var fs = require('fs');
+var redis = require('redis');
 const cert = fs.readFileSync('./key/public.pem');
+
+var redisClient = redis.createClient(process.env.REDIS_PORT, process.env.REDIS_HOST);
+
+redisClient.on('connect', () => {
+  console.log('Redis client connected');
+})
 
 server.listen(port, () => {
   console.log('Server listening at port %d', port);
@@ -49,7 +56,37 @@ io.on('connection', (socket) => {
   socket.on('join', (data) => {
     socket.join(data.room);
     socket.tide = data.room;
+    if (socket.isAuthenticated) {
+      redisClient.set(socket.id, JSON.stringify(data.user), () => {});
+    }
     io.to(socket.tide).emit('join', {user: data.user});
+
+    io.in(socket.tide).clients((error, clients) => {
+      if (error) throw error;
+
+      let fn = function getUserData(id) {
+        return new Promise((resolve, reject) => {
+          if (id === socket.id) {
+            resolve();
+          }
+          redisClient.get(id, (error, result) => {
+            if (error) {
+              console.log(error);
+              throw error;
+            }
+            resolve(JSON.parse(result));
+          })
+        })
+      }
+
+      let results = clients.map(fn);
+      let userData = Promise.all(results);
+
+      userData.then((data) => {
+        io.to(socket.id).emit('participants', data);
+      })
+    });
+
   });
 
   socket.on('message', (msg) => {
