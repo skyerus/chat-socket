@@ -7,15 +7,12 @@ var app = express();
 var server = require('http').createServer(app);
 var port = 3000;
 var io = require('socket.io')(server);
-var axios = require('axios');
 var dotenv = require('dotenv').config();
 var jwt = require('jsonwebtoken');
 var cli = require('./services/cli.js')
 var fs = require('fs');
-var redis = require('redis');
 const cert = fs.readFileSync('./key/public.pem');
-
-var redisClient = redis.createClient(process.env.REDIS_PORT, process.env.REDIS_HOST);
+var redisClient = require('./redis');
 
 redisClient.on('connect', () => {
   console.log('Redis client connected');
@@ -30,12 +27,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 io.use((socket, next) => {
   if (socket.handshake.query && socket.handshake.query.token) {
     try {
-      let decoded = jwt.verify(socket.handshake.query.token.split(' ')[1], cert, {algorithms: 'RS256'});
+      let token = socket.handshake.query.token.split(' ')[1];
+      let decoded = jwt.verify(token, cert, {algorithms: 'RS256'});
       socket.username = decoded.username;
       socket.isAuthenticated = true;
+      redisClient.set(socket.id, JSON.stringify({token: token}), () => {});
     } catch (e) {
       socket.isAuthenticated = false;
-      console.log('Caught error');
       return next();
     }
     next();
@@ -59,7 +57,15 @@ io.on('connection', (socket) => {
     socket.join(data.tide);
     socket.tide = data.tide;
     if (socket.isAuthenticated) {
-      redisClient.set(socket.id, JSON.stringify(data.user), () => {});
+      redisClient.get(socket.id, (error, result) => {
+        if (error) {
+          console.log(error);
+          throw error;
+        }
+        result = JSON.parse(result);
+        result.user = data.user;
+        redisClient.set(socket.id, JSON.stringify(result), () => {});
+      });
     }
     io.to(socket.tide).emit('join', {user: data.user});
 
@@ -76,11 +82,12 @@ io.on('connection', (socket) => {
           type: 'italic'
         })
         let split = msg.split('!');
-        let response = cli.handle(split[1]);
-        io.to(socket.id).emit('message', {
-          message: response,
-          type: 'italic'
-        })
+        cli.handle(split[1], socket.id).then((response) => {
+          io.to(socket.id).emit('message', {
+            message: response,
+            type: 'italic'
+          })
+        });
       } else {
         io.to(socket.tide).emit('message', {
           username: socket.username,
@@ -117,7 +124,11 @@ io.on('connection', (socket) => {
               console.log(error);
               throw error;
             }
-            resolve(JSON.parse(result));
+            result = JSON.parse(result);
+            if (result !== null) {
+              result = result.user;
+            }
+            resolve(result);
           })
         })
       }
