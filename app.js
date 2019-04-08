@@ -91,6 +91,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('message', (msg) => {
+    console.log(msg);
     if (socket.isAuthenticated) {
       io.to(socket.tide).emit('message', {
         username: socket.username,
@@ -107,6 +108,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', (reason) => {
     console.log(`${socket.username} disconnected`);
+    redisClient.del(socket.id);
     io.to(socket.tide).emit('leave', socket.username);
   })
 });
