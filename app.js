@@ -9,7 +9,7 @@ var port = 3000;
 var io = require('socket.io')(server);
 var dotenv = require('dotenv').config();
 var jwt = require('jsonwebtoken');
-var cli = require('./services/cli.js')
+var cli = require('./services/cli.js')(io);
 var fs = require('fs');
 const cert = fs.readFileSync('./key/public.pem');
 var redisClient = require('./redis');
@@ -75,6 +75,7 @@ io.on('connection', (socket) => {
   socket.on('message', (msg) => {
     console.log(msg);
     if (socket.isAuthenticated) {
+      // Handle cmds such as !play
       if (msg.charAt(0) === '!') {
         io.to(socket.id).emit('message', {
           username: socket.username,
@@ -82,11 +83,13 @@ io.on('connection', (socket) => {
           type: 'italic'
         })
         let split = msg.split('!');
-        cli.handle(split[1], socket.id).then((response) => {
-          io.to(socket.id).emit('message', {
-            message: response,
-            type: 'italic'
-          })
+        cli.handle(split[1], socket.id, socket.tide).then((response) => {
+          if (typeof response !== 'undefined') {
+            io.to(socket.id).emit('message', {
+              message: response,
+              type: 'italic'
+            })
+          }
         });
       } else {
         io.to(socket.tide).emit('message', {
