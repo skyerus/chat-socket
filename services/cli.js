@@ -47,30 +47,6 @@ cli.help = () => {
 
 cli.play = (args) => {
   return new Promise((resolve, reject) => {
-    redisClient.get(args.id, (error, result) => {
-      if (error) {
-        console.log(error);
-        throw error;
-      }
-      result = JSON.parse(result);
-      axios({
-        method: 'put',
-        url: '/api/spotify/v1/search/play',
-        headers: {"Authorization": `Bearer ${result.token}`},
-        data: {
-          q: args.query.join(' ')
-        }
-      }).then((response) => {
-        resolve(`Now playing ${response.data.name} by ${response.data.artist}`);
-      }).catch((error) => {
-        resolve(error.response.data.message);
-      })
-    });
-  })
-}
-
-cli.queue = (args) => {
-  return new Promise((resolve, reject) => {
     helpers.search(args.id, args.query).then((searchRes) => {
       redisClient.lrange(args.tide, 0, 0, (err, left) => {
         redisClient.rpush([args.tide, JSON.stringify(searchRes)], () => {
@@ -91,6 +67,10 @@ cli.queue = (args) => {
       resolve(error);
     })
   })
+}
+
+cli.queue = (args) => {
+  return cli.play(args)
 }
 
 helpers.search = (socketId, query) => {
@@ -126,10 +106,14 @@ helpers.play = (tide) => {
         console.log(error)
         throw error
       }
-      if (res !== null) {
+      if (res.length !== 0) {
         song = JSON.parse(res)
         helpers.getParticipants(tide).then((participants) => {
           helpers.getParticipantsData(participants).then((participantsData) => {
+            if (participantsData.length === 0) {
+              redisClient.del(tide)
+              resolve()
+            }
             let songReqs = participantsData.map(helpers.sendPlayRequest)
 
             Promise.all(songReqs).then((playResponses) => {
@@ -202,7 +186,9 @@ helpers.getParticipantsData = (participants) => {
             console.log(error);
             throw error;
           }
-          result = JSON.parse(result);
+          if (typeof result !== 'undefined') {
+            result = JSON.parse(result);
+          }
           resolve(result);
         })
       })
