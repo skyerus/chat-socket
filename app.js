@@ -7,11 +7,16 @@ var app = express();
 var server = require('http').createServer(app);
 var port = 3000;
 var io = require('socket.io')(server);
-var axios = require('axios');
 var dotenv = require('dotenv').config();
 var jwt = require('jsonwebtoken');
+var cli = require('./services/cli.js')(io);
 var fs = require('fs');
 const cert = fs.readFileSync('./key/public.pem');
+var redisClient = require('./redis');
+
+redisClient.on('connect', () => {
+  console.log('Redis client connected');
+})
 
 server.listen(port, () => {
   console.log('Server listening at port %d', port);
@@ -22,12 +27,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 io.use((socket, next) => {
   if (socket.handshake.query && socket.handshake.query.token) {
     try {
-      let decoded = jwt.verify(socket.handshake.query.token.split(' ')[1], cert, {algorithms: 'RS256'});
+      let token = socket.handshake.query.token.split(' ')[1];
+      let decoded = jwt.verify(token, cert, {algorithms: 'RS256'});
       socket.username = decoded.username;
       socket.isAuthenticated = true;
+      redisClient.set(socket.id, JSON.stringify({token: token}), () => {});
     } catch (e) {
       socket.isAuthenticated = false;
-      console.log('Caught error');
       return next();
     }
     next();
@@ -47,17 +53,51 @@ io.on('connection', (socket) => {
   }
 
   socket.on('join', (data) => {
-    socket.join(data.room);
-    socket.tide = data.room;
+    console.log(`${socket.username} joined tide`);
+    socket.join(data.tide);
+    socket.tide = data.tide;
+    if (socket.isAuthenticated) {
+      redisClient.get(socket.id, (error, result) => {
+        if (error) {
+          console.log(error);
+          throw error;
+        }
+        result = JSON.parse(result);
+        result.user = data.user;
+        redisClient.set(socket.id, JSON.stringify(result), () => {});
+      });
+    }
     io.to(socket.tide).emit('join', {user: data.user});
+
+    emitParticipants();
   });
 
   socket.on('message', (msg) => {
+    console.log(msg);
     if (socket.isAuthenticated) {
-      io.to(socket.tide).emit('message', {
-        message: msg,
-        type: 'standard'
-      })
+      // Handle cmds such as !play
+      if (msg.charAt(0) === '!') {
+        io.to(socket.id).emit('message', {
+          username: socket.username,
+          message: msg,
+          type: 'italic'
+        })
+        let split = msg.split('!');
+        cli.handle(split[1], socket.id, socket.tide).then((response) => {
+          if (typeof response !== 'undefined') {
+            io.to(socket.id).emit('message', {
+              message: response,
+              type: 'italic'
+            })
+          }
+        });
+      } else {
+        io.to(socket.tide).emit('message', {
+          username: socket.username,
+          message: msg,
+          type: 'standard'
+        })
+      }
     } else {
       io.to(socket.id).emit('message', {
         message: 'You must be logged in to contribute',
@@ -67,9 +107,43 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', (reason) => {
-    io.to(socket.tide).emit('leave', socket.username);
     console.log(`${socket.username} disconnected`);
+    redisClient.del(socket.id);
+    emitParticipants();
+    io.to(socket.tide).emit('leave', socket.username);
   })
+
+  let emitParticipants = function () {
+    io.in(socket.tide).clients((error, clients) => {
+      if (error) throw error;
+
+      let fn = function getUserData(id) {
+        return new Promise((resolve, reject) => {
+          if (id === socket.id) {
+            resolve();
+          }
+          redisClient.get(id, (error, result) => {
+            if (error) {
+              console.log(error);
+              throw error;
+            }
+            result = JSON.parse(result);
+            if (result !== null) {
+              result = result.user;
+            }
+            resolve(result);
+          })
+        })
+      }
+
+      let results = clients.map(fn);
+      let userData = Promise.all(results);
+
+      userData.then((data) => {
+        io.to(socket.tide).emit('participants', data);
+      })
+    });
+  }
 });
 
 
