@@ -47,35 +47,19 @@ cli.help = () => {
 
 cli.play = (args) => {
   return new Promise((resolve, reject) => {
-    redisClient.get(args.id, (error, result) => {
-      if (error) {
-        console.log(error);
-        throw error;
-      }
-      result = JSON.parse(result);
-      axios({
-        method: 'put',
-        url: '/api/spotify/v1/search/play',
-        headers: {"Authorization": `Bearer ${result.token}`},
-        data: {
-          q: args.query.join(' ')
-        }
-      }).then((response) => {
-        resolve(`Now playing ${response.data.name} by ${response.data.artist}`);
-      }).catch((error) => {
-        resolve(error.response.data.message);
-      })
-    });
-  })
-}
-
-cli.queue = (args) => {
-  return new Promise((resolve, reject) => {
     helpers.search(args.id, args.query).then((searchRes) => {
-      redisClient.lrange(args.tide, 0, 0, (err, left) => {
-        redisClient.rpush([args.tide, JSON.stringify(searchRes)], () => {
-          if (left.length === 0) {
-            helpers.play(args.tide).then(() => {
+      redisClient.get(args.tide, (err, queue) => {
+        let empty = false;
+        if (queue === null) {
+          queue = []
+          empty = true
+        } else {
+          queue = JSON.parse(queue)
+        }
+        queue.push(searchRes)
+        redisClient.set(args.tide, JSON.stringify(queue), () => {
+          if (empty) {
+            helpers.play(args.tide, queue).then(() => {
               resolve();
             })
           } else {
@@ -91,6 +75,10 @@ cli.queue = (args) => {
       resolve(error);
     })
   })
+}
+
+cli.queue = (args) => {
+  return cli.play(args)
 }
 
 helpers.search = (socketId, query) => {
@@ -119,47 +107,56 @@ helpers.search = (socketId, query) => {
   })
 }
 
-helpers.play = (tide) => {
+helpers.play = (tide, queue) => {
   return new Promise((resolve, reject) => {
-    redisClient.lrange(tide, 0, 0, (err, res) => {
-      if (err) {
-        console.log(error)
-        throw error
-      }
-      if (res !== null) {
-        song = JSON.parse(res)
-        helpers.getParticipants(tide).then((participants) => {
-          helpers.getParticipantsData(participants).then((participantsData) => {
-            let songReqs = participantsData.map(helpers.sendPlayRequest)
+    song = queue[queue.length - 1]
 
-            Promise.all(songReqs).then((playResponses) => {
-              setTimeout(() => {
-                redisClient.lpop(tide, (err, res) => {
-                  helpers.play(tide)
-                })
-              }, song.duration_ms + 800)
+    helpers.getParticipants(tide).then((participants) => {
+      helpers.getParticipantsData(participants).then((participantsData) => {
+        if (participantsData.length === 0) {
+          redisClient.del(tide)
+          resolve()
+        }
+        let songReqs = participantsData.map(helpers.sendPlayRequest)
 
-              playResponses.forEach((playResponse, index) => {
-                let message;
-                if (typeof playResponse === 'undefined') {
-                  message = `Now playing ${song.name} by ${song.artist}`
-                } else {
-                  message = `There was an error playing: ${playResponse}`
-                }
-                io.to(participants[index]).emit('message', {
-                  message: message,
-                  type: 'italic'
-                })
+        Promise.all(songReqs).then((playResponses) => {
+          // Recursively call next song in queue
+          setTimeout(() => {
+            redisClient.get(tide, (err, res) => {
+              queue = JSON.parse(res)
+              queue.shift()
+
+              if (queue.length === 0) {
+                redisClient.del(tide)
+                resolve()
+                return
+              }
+
+              redisClient.set(tide, JSON.stringify(queue), () => {
+                helpers.play(tide, queue)
               })
-
-              resolve()
             })
+          }, song.duration_ms + 800)
 
+          io.to(tide).emit('queue', queue)
+
+          playResponses.forEach((playResponse, index) => {
+            let message;
+            if (typeof playResponse === 'undefined') {
+              message = `Now playing ${song.name} by ${song.artist}`
+            } else {
+              message = `There was an error playing: ${playResponse}`
+            }
+            io.to(participants[index]).emit('message', {
+              message: message,
+              type: 'italic'
+            })
           })
+
+          resolve()
         })
-      } else {
-        resolve()
-      }
+
+      })
     })
   })
 }
@@ -202,7 +199,9 @@ helpers.getParticipantsData = (participants) => {
             console.log(error);
             throw error;
           }
-          result = JSON.parse(result);
+          if (typeof result !== 'undefined') {
+            result = JSON.parse(result);
+          }
           resolve(result);
         })
       })

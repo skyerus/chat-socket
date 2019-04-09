@@ -73,7 +73,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('message', (msg) => {
-    console.log(msg);
     if (socket.isAuthenticated) {
       // Handle cmds such as !play
       if (msg.charAt(0) === '!') {
