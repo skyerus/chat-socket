@@ -109,7 +109,7 @@ helpers.search = (socketId, query) => {
 
 helpers.play = (tide, queue) => {
   return new Promise((resolve, reject) => {
-    song = queue.shift()
+    song = queue[queue.length - 1]
 
     helpers.getParticipants(tide).then((participants) => {
       helpers.getParticipantsData(participants).then((participantsData) => {
@@ -120,20 +120,25 @@ helpers.play = (tide, queue) => {
         let songReqs = participantsData.map(helpers.sendPlayRequest)
 
         Promise.all(songReqs).then((playResponses) => {
+          // Recursively call next song in queue
           setTimeout(() => {
             redisClient.get(tide, (err, res) => {
               queue = JSON.parse(res)
+              queue.shift()
+
               if (queue.length === 0) {
                 redisClient.del(tide)
                 resolve()
                 return
               }
-              queue.shift()
+
               redisClient.set(tide, JSON.stringify(queue), () => {
                 helpers.play(tide, queue)
               })
             })
           }, song.duration_ms + 800)
+
+          io.to(tide).emit('queue', queue)
 
           playResponses.forEach((playResponse, index) => {
             let message;
