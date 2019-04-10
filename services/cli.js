@@ -63,10 +63,7 @@ cli.play = (args) => {
               resolve();
             })
           } else {
-            io.to(args.tide).emit('message', {
-              message: `Added ${searchRes.name} by ${searchRes.artist} to the queue`,
-              type: 'italic'
-            })
+            io.to(args.tide).emit('queue', queue)
             resolve();
           }
         });
@@ -127,6 +124,7 @@ helpers.play = (tide, queue) => {
               queue.shift()
 
               if (queue.length === 0) {
+                io.to(tide).emit('queue', queue)
                 redisClient.del(tide)
                 resolve()
                 return
@@ -141,16 +139,12 @@ helpers.play = (tide, queue) => {
           io.to(tide).emit('queue', queue)
 
           playResponses.forEach((playResponse, index) => {
-            let message;
-            if (typeof playResponse === 'undefined') {
-              message = `Now playing ${song.name} by ${song.artist}`
-            } else {
-              message = `There was an error playing: ${playResponse}`
+            if (typeof playResponse !== 'undefined') {
+              io.to(participants[index]).emit('message', {
+                message: `There was an error playing: ${playResponse}`,
+                type: 'italic'
+              })
             }
-            io.to(participants[index]).emit('message', {
-              message: message,
-              type: 'italic'
-            })
           })
 
           resolve()
