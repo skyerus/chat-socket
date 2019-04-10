@@ -13,6 +13,7 @@ var cli = require('./services/cli.js')(io);
 var fs = require('fs');
 const cert = fs.readFileSync('./key/public.pem');
 var redisClient = require('./redis');
+var mysql = require('./services/mysql.js')
 
 redisClient.on('connect', () => {
   console.log('Redis client connected');
@@ -54,6 +55,9 @@ io.on('connection', (socket) => {
 
   socket.on('join', (data) => {
     console.log(`${socket.username} joined tide`);
+    if (typeof socket.username !== 'undefined') {
+      mysql.addUserToTide(socket.username, data.tide)
+    }
     socket.join(data.tide);
     socket.tide = data.tide;
     if (socket.isAuthenticated) {
@@ -113,8 +117,11 @@ io.on('connection', (socket) => {
   socket.on('disconnect', (reason) => {
     console.log(`${socket.username} disconnected`);
     redisClient.del(socket.id);
-    emitParticipants();
-    io.to(socket.tide).emit('leave', socket.username);
+    if (typeof socket.tide !== 'undefined' && typeof socket.username !== 'undefined') {
+      mysql.removeUserFromTide(socket.username, socket.tide)
+      emitParticipants();
+      io.to(socket.tide).emit('leave', socket.username);
+    }
   })
 
   let emitParticipants = function () {
