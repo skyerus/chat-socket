@@ -68,7 +68,12 @@ io.on('connection', (socket) => {
       });
     }
     io.to(socket.tide).emit('join', {user: data.user});
+    redisClient.get(data.tide, (err, queue) => {
+      if (err) { throw err }
 
+      queue = queue !== null ? JSON.parse(queue) : []
+      io.to(data.tide).emit('queue', queue)
+    })
     emitParticipants();
   });
 
