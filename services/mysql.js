@@ -7,48 +7,40 @@ var con = mysql.createConnection({
   database: process.env.MYSQL_DATABASE
 })
 
+con.connect(function(err) {
+  if (err) throw err
+});
+
 module.exports = {
   addUserToTide(username, tideId) {
     return new Promise((resolve, reject) => {
-      con.connect(function(err) {
+      con.query(`SELECT id FROM user WHERE username = ${mysql.escape(username)}`, (err, result) => {
         if (err) {
           reject(err)
         }
-
-        con.query(`SELECT id FROM user WHERE username=${username}`, (err, result) => {
+        con.query(`INSERT INTO tide_participant (user_id, tide_id) VALUES (${mysql.escape(result[0].id)}, ${mysql.escape(tideId)})`, (err, result) => {
           if (err) {
             reject(err)
           }
-          con.query(`INSERT INTO tide_participant (user_id, tide_id) VALUES (${result}, ${tideId})`, (err, result) => {
-            if (err) {
-              reject(err)
-            }
-            resolve()
-          })
+          resolve()
         })
-      });
-    })
+      })
+    });
   },
 
   removeUserFromTide(username, tideId) {
     return new Promise((resolve, reject) => {
-      con.connect(function(err) {
+      con.query(`SELECT id FROM user WHERE username=${mysql.escape(username)}`, (err, result) => {
         if (err) {
           reject(err)
         }
-
-        con.query(`SELECT id FROM user WHERE username=${username}`, (err, result) => {
+        con.query(`DELETE FROM tide_participant WHERE (user_id = ${mysql.escape(result[0].id)}) AND (tide_id = ${mysql.escape(tideId)})`, (err, result) => {
           if (err) {
             reject(err)
           }
-          con.query(`DELETE FROM tide_participant WHERE (user_id = ${result}) AND (tide_id = ${tideId})`, (err, result) => {
-            if (err) {
-              reject(err)
-            }
-            resolve()
-          })
+          resolve()
         })
-      });
+      })
     })
   }
 }

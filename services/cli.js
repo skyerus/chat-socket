@@ -56,7 +56,6 @@ cli.play = (args) => {
           queue = JSON.parse(queue)
         }
         queue.push(searchRes)
-        console.log(args.tide)
         redisClient.hset(args.tide, 'queue', JSON.stringify(queue), () => {
           if (empty) {
             helpers.play(args.tide, queue)
