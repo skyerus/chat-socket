@@ -2,7 +2,6 @@ var axios = require('axios');
 var redisClient = require('../redis.js')
 var buildQuery = require('./BuildQuery.js')
 var io;
-var song;
 const util = require('util')
 
 axios.defaults.baseURL = process.env.RIPTIDES_API_HOST;
@@ -48,7 +47,7 @@ cli.help = () => {
 cli.play = (args) => {
   return new Promise((resolve, reject) => {
     helpers.search(args.id, args.query).then((searchRes) => {
-      redisClient.get(args.tide, (err, queue) => {
+      redisClient.hget(args.tide, 'queue', (err, queue) => {
         let empty = false;
         if (queue === null) {
           queue = []
@@ -57,11 +56,10 @@ cli.play = (args) => {
           queue = JSON.parse(queue)
         }
         queue.push(searchRes)
-        redisClient.set(args.tide, JSON.stringify(queue), () => {
+        console.log(args.tide)
+        redisClient.hset(args.tide, 'queue', JSON.stringify(queue), () => {
           if (empty) {
-            helpers.play(args.tide, queue).then(() => {
-              resolve();
-            })
+            helpers.play(args.tide, queue)
           } else {
             io.to(args.tide).emit('queue', queue)
             resolve();
@@ -76,6 +74,41 @@ cli.play = (args) => {
 
 cli.queue = (args) => {
   return cli.play(args)
+}
+
+cli.skip = (args) => {
+  return new Promise((resolve, reject) => {
+    if (args.query.length > 1) {
+      return resolve('!skip only accepts at most one parameter')
+
+    } else if (args.query.length === 1) {
+      let int = parseInt(args.query[0])
+      if (isNaN(int)) {
+        return resolve('!skip only accepts an integer as a parameter')
+      }
+      redisClient.hget(args.tide, 'queue', (err, queue) => {
+        queue = JSON.parse(queue)
+        if (queue === null || queue.length === 0) {
+          return resolve('The queue is empty')
+        }
+        queue.splice(int, 1)
+        redisClient.hset(args.tide, 'queue', JSON.stringify(queue))
+        io.to(args.tide).emit('queue', queue)
+        resolve()
+      })
+    } else {
+      redisClient.hget(args.tide, 'queue', (err, queue) => {
+        queue = JSON.parse(queue)
+        if (queue === null || queue.length === 0) {
+          return resolve('There is nothing playing')
+        }
+        queue.shift()
+        helpers.play(args.tide, queue).then(() => {
+          redisClient.hset(args.tide, 'queue', JSON.stringify(queue))
+        })
+      })
+    }
+  })
 }
 
 helpers.search = (socketId, query) => {
@@ -106,31 +139,38 @@ helpers.search = (socketId, query) => {
 
 helpers.play = (tide, queue) => {
   return new Promise((resolve, reject) => {
-    song = queue[queue.length - 1]
+    let song = queue[0]
+    song.timeStamp = Date.now()
 
     helpers.getParticipants(tide).then((participants) => {
       helpers.getParticipantsData(participants).then((participantsData) => {
         if (participantsData.length === 0) {
           redisClient.del(tide)
-          resolve()
+          return resolve()
         }
-        let songReqs = participantsData.map(helpers.sendPlayRequest)
+        let songReqs = participantsData.map(helpers.sendPlayRequest.bind({ song: song }))
 
         Promise.all(songReqs).then((playResponses) => {
+          redisClient.hset(tide, 'playing', JSON.stringify(song))
+          resolve()
           // Recursively call next song in queue
           setTimeout(() => {
-            redisClient.get(tide, (err, res) => {
-              queue = JSON.parse(res)
+            redisClient.hgetall(tide, (err, res) => {
+              let playing = JSON.parse(res.playing)
+              // Check if playlist has been altered
+              if (playing.timeStamp !== song.timeStamp) {
+                return resolve()
+              }
+              queue = JSON.parse(res.queue)
               queue.shift()
 
               if (queue.length === 0) {
                 io.to(tide).emit('queue', queue)
                 redisClient.del(tide)
-                resolve()
-                return
+                return resolve()
               }
 
-              redisClient.set(tide, JSON.stringify(queue), () => {
+              redisClient.hset(tide, 'queue', JSON.stringify(queue), () => {
                 helpers.play(tide, queue)
               })
             })
@@ -155,7 +195,7 @@ helpers.play = (tide, queue) => {
   })
 }
 
-helpers.sendPlayRequest = (user) => {
+helpers.sendPlayRequest = function(user) {
   return new Promise((resolve, reject) => {
     if (user !== null) {
       axios({
@@ -163,7 +203,7 @@ helpers.sendPlayRequest = (user) => {
         url: '/api/spotify/v1/me/player/play',
         headers: {"Authorization": `Bearer ${user.token}`},
         data: {
-          uri: song.uri
+          uri: this.song.uri
         }
       }).then(() => {
         resolve()
