@@ -42,5 +42,21 @@ module.exports = {
         })
       })
     })
+  },
+
+  removeUserFromAllTides(username, tideId) {
+    return new Promise((resolve, reject) => {
+      con.query(`SELECT id FROM user WHERE username=${mysql.escape(username)}`, (err, result) => {
+        if (err) {
+          reject(err)
+        }
+        con.query(`DELETE FROM tide_participant WHERE (user_id = ${mysql.escape(result[0].id)})`, (err, result) => {
+          if (err) {
+            reject(err)
+          }
+          resolve()
+        })
+      })
+    })
   }
 }

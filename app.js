@@ -124,7 +124,7 @@ io.on('connection', (socket) => {
     console.log(`${socket.username} disconnected`);
     redisClient.del(socket.id);
     if (typeof socket.tide !== 'undefined' && typeof socket.username !== 'undefined') {
-      mysql.removeUserFromTide(socket.username, socket.tide)
+      mysql.removeUserFromAllTides(socket.username, socket.tide)
       emitParticipants();
       io.to(socket.tide).emit('leave', socket.username);
     }
