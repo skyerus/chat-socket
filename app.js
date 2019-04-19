@@ -178,6 +178,11 @@ app.use(allowCrossDomain);
 app.use(logger('dev'));
 app.use(express.json());
 
+app.use('/', function (req, res, next) {
+  res.status(200).json({success: true})
+});
+
+
 app.use('/push', function (req, res, next) {
   let decoded;
   try {
