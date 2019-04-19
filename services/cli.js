@@ -125,7 +125,7 @@ helpers.search = (socketId, query) => {
       result = JSON.parse(result);
       axios({
         method: 'get',
-        url: `/api/spotify/v1/search${query}`,
+        url: `/api/auth/spotify/v1/search${query}`,
         headers: {"Authorization": `Bearer ${result.token}`}
       }).then((response) => {
         resolve(response.data);
@@ -199,7 +199,7 @@ helpers.sendPlayRequest = function(user) {
     if (user !== null) {
       axios({
         method: 'put',
-        url: '/api/spotify/v1/me/player/play',
+        url: '/api/auth/spotify/v1/me/player/play',
         headers: {"Authorization": `Bearer ${user.token}`},
         data: {
           uri: this.song.uri
