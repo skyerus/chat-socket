@@ -14,6 +14,7 @@ var fs = require('fs');
 const cert = fs.readFileSync('./key/public.pem');
 var redisClient = require('./redis');
 var mysql = require('./services/mysql.js')
+const util = require('util')
 
 redisClient.on('connect', () => {
   console.log('Redis client connected');
@@ -72,14 +73,19 @@ io.on('connection', (socket) => {
       });
     }
     io.to(socket.tide).emit('join', {user: data.user});
-    redisClient.get(data.tide, (err, queue) => {
+    redisClient.hget(data.tide, 'queue', (err, queue) => {
       if (err) { throw err }
-
-      queue = queue !== null ? JSON.parse(queue) : []
+      queue = (queue !== null) ? JSON.parse(queue) : []
       io.to(data.tide).emit('queue', queue)
     })
     emitParticipants();
   });
+
+  socket.on('leave', () => {
+    console.log('Leave request')
+    socket.leave(socket.tide)
+    mysql.removeUserFromTide(socket.username, socket.tide)
+  })
 
   socket.on('message', (msg) => {
     if (socket.isAuthenticated) {
@@ -118,7 +124,7 @@ io.on('connection', (socket) => {
     console.log(`${socket.username} disconnected`);
     redisClient.del(socket.id);
     if (typeof socket.tide !== 'undefined' && typeof socket.username !== 'undefined') {
-      mysql.removeUserFromTide(socket.username, socket.tide)
+      mysql.removeUserFromAllTides(socket.username, socket.tide)
       emitParticipants();
       io.to(socket.tide).emit('leave', socket.username);
     }
