@@ -2,7 +2,6 @@ var pushNotifications = require('./routes/pushNotifications.js');
 var createError = require('http-errors');
 var express = require('express');
 var path = require('path');
-var logger = require('morgan');
 var app = express();
 var server = require('http').createServer(app);
 var port = process.env.PORT || 80;
@@ -15,13 +14,14 @@ const cert = fs.readFileSync('./key/public.pem');
 var redisClient = require('./redis');
 var mysql = require('./services/mysql.js')
 const util = require('util')
+var logger = require('./services/logger.js')
 
 redisClient.on('connect', () => {
-  console.log('Redis client connected');
+  logger.info('Redis client connected')
 })
 
 server.listen(port, () => {
-  console.log('Server listening at port %d', port);
+  logger.info('Server listening at port %d', port);
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -46,7 +46,6 @@ io.use((socket, next) => {
 });
 
 io.on('connection', (socket) => {
-  console.log(`${socket.username} connected`);
 
   if (socket.isAuthenticated) {
     socket.join(socket.username);
@@ -55,7 +54,6 @@ io.on('connection', (socket) => {
   }
 
   socket.on('join', (data) => {
-    console.log(`${socket.username} joined tide`);
     if (typeof socket.username !== 'undefined') {
       mysql.addUserToTide(socket.username, data.tide)
     }
@@ -64,7 +62,7 @@ io.on('connection', (socket) => {
     if (socket.isAuthenticated) {
       redisClient.get(socket.id, (error, result) => {
         if (error) {
-          console.log(error);
+          logger.error(error);
           throw error;
         }
         result = JSON.parse(result);
@@ -82,7 +80,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('leave', () => {
-    console.log('Leave request')
     socket.leave(socket.tide)
     mysql.removeUserFromTide(socket.username, socket.tide)
   })
@@ -121,7 +118,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', (reason) => {
-    console.log(`${socket.username} disconnected`);
     redisClient.del(socket.id);
     if (typeof socket.tide !== 'undefined' && typeof socket.username !== 'undefined') {
       mysql.removeUserFromAllTides(socket.username, socket.tide)
@@ -141,7 +137,7 @@ io.on('connection', (socket) => {
           }
           redisClient.get(id, (error, result) => {
             if (error) {
-              console.log(error);
+              logger.error(error)
               throw error;
             }
             result = JSON.parse(result);
@@ -175,7 +171,6 @@ var allowCrossDomain = function(req, res, next) {
 }
 
 app.use(allowCrossDomain);
-app.use(logger('dev'));
 app.use(express.json());
 
 app.use('/', function (req, res, next) {

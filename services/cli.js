@@ -1,6 +1,7 @@
 var axios = require('axios');
 var redisClient = require('../redis.js')
 var buildQuery = require('./BuildQuery.js')
+var logger = require('./logger.js')
 var io;
 const util = require('util')
 
@@ -119,7 +120,7 @@ helpers.search = (socketId, query) => {
     query = buildQuery.build(query);
     redisClient.get(socketId, (error, result) => {
       if (error) {
-        console.log(error);
+        logger.error(error);
         throw error;
       }
       result = JSON.parse(result);
@@ -229,7 +230,7 @@ helpers.getParticipantsData = (participants) => {
       return new Promise((resolve, reject) => {
         redisClient.get(id, (error, result) => {
           if (error) {
-            console.log(error);
+            logger.error(error);
             throw error;
           }
           if (typeof result !== 'undefined') {
