@@ -1,5 +1,5 @@
 var mysql = require('mysql')
-var logger = require('logger.js')
+var logger = require('./logger.js')
 
 var con = mysql.createConnection({
   host: process.env.MYSQL_HOST,
