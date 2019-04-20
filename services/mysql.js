@@ -1,4 +1,5 @@
 var mysql = require('mysql')
+var logger = require('logger.js')
 
 var con = mysql.createConnection({
   host: process.env.MYSQL_HOST,
@@ -16,11 +17,13 @@ module.exports = {
     return new Promise((resolve, reject) => {
       con.query(`SELECT id FROM user WHERE username = ${mysql.escape(username)}`, (err, result) => {
         if (err) {
-          reject(err)
+          logger.error(err)
+          return reject(err)
         }
         con.query(`INSERT INTO tide_participant (user_id, tide_id) VALUES (${mysql.escape(result[0].id)}, ${mysql.escape(tideId)})`, (err, result) => {
           if (err) {
-            reject(err)
+            logger.error(err)
+            return reject(err)
           }
           resolve()
         })
@@ -32,11 +35,13 @@ module.exports = {
     return new Promise((resolve, reject) => {
       con.query(`SELECT id FROM user WHERE username=${mysql.escape(username)}`, (err, result) => {
         if (err) {
-          reject(err)
+          logger.error(err)
+          return reject(err)
         }
         con.query(`DELETE FROM tide_participant WHERE (user_id = ${mysql.escape(result[0].id)}) AND (tide_id = ${mysql.escape(tideId)})`, (err, result) => {
           if (err) {
-            reject(err)
+            logger.error(err)
+            return reject(err)
           }
           resolve()
         })
@@ -48,11 +53,13 @@ module.exports = {
     return new Promise((resolve, reject) => {
       con.query(`SELECT id FROM user WHERE username=${mysql.escape(username)}`, (err, result) => {
         if (err) {
-          reject(err)
+          logger.error(err)
+          return reject(err)
         }
         con.query(`DELETE FROM tide_participant WHERE (user_id = ${mysql.escape(result[0].id)})`, (err, result) => {
           if (err) {
-            reject(err)
+            logger.error(err)
+            return reject(err)
           }
           resolve()
         })
