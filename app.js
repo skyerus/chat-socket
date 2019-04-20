@@ -6,7 +6,7 @@ var logger = require('morgan');
 var app = express();
 var server = require('http').createServer(app);
 var port = process.env.PORT || 80;
-var io = require('socket.io')(server);
+var io = require('socket.io')(server, { path: '/socket/socket.io' });
 var dotenv = require('dotenv').config();
 var jwt = require('jsonwebtoken');
 var cli = require('./services/cli.js')(io);
@@ -183,7 +183,7 @@ app.use('/', function (req, res, next) {
 });
 
 
-app.use('/push', function (req, res, next) {
+app.use('/socket/push', function (req, res, next) {
   let decoded;
   try {
     let token = req.headers.authorization.split(" ")[1];
