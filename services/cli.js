@@ -3,6 +3,7 @@ var redisClient = require('../redis.js')
 var buildQuery = require('./BuildQuery.js')
 var logger = require('./logger.js')
 var io;
+var mysql = require('./mysql.js')
 const util = require('util')
 
 axios.defaults.baseURL = process.env.RIPTIDES_API_HOST;
@@ -10,13 +11,14 @@ axios.defaults.baseURL = process.env.RIPTIDES_API_HOST;
 module.exports = (ioInstance) => {
   io = ioInstance;
   var cli = {};
-  cli.handle = (name, id, tide) => {
+  cli.handle = (name, id, username, tide) => {
     let args = name.split(' ');
     name = args[0];
     args.splice(0, 1);
     args = {
       query: args,
       id: id,
+      username: username,
       tide: tide
     };
     return callFunc(name, args);
@@ -57,14 +59,20 @@ cli.play = (args) => {
           queue = JSON.parse(queue)
         }
         queue.push(searchRes)
-        redisClient.hset(args.tide, 'queue', JSON.stringify(queue), () => {
-          if (empty) {
-            helpers.play(args.tide, queue)
-          } else {
-            io.to(args.tide).emit('queue', queue)
-            resolve();
+        mysql.getUserInfo(args.username).then((user) => {
+          queue[queue.length - 1].user = {
+            username: args.username,
+            avatar: user.avatar
           }
-        });
+          redisClient.hset(args.tide, 'queue', JSON.stringify(queue), () => {
+            if (empty) {
+              helpers.play(args.tide, queue)
+            } else {
+              io.to(args.tide).emit('queue', queue)
+              resolve();
+            }
+          });
+        })
       })
     }).catch((error) => {
       resolve(error);
@@ -156,6 +164,9 @@ helpers.play = (tide, queue) => {
           // Recursively call next song in queue
           setTimeout(() => {
             redisClient.hgetall(tide, (err, res) => {
+              if (res === null) {
+                return resolve()
+              }
               let playing = JSON.parse(res.playing)
               // Check if playlist has been altered
               if (playing.timeStamp !== song.timeStamp) {

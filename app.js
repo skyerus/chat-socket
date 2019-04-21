@@ -100,7 +100,7 @@ io.on('connection', (socket) => {
           type: 'italic'
         })
         let split = msg.split('!');
-        cli.handle(split[1], socket.id, socket.tide).then((response) => {
+        cli.handle(split[1], socket.id, socket.username, socket.tide).then((response) => {
           if (typeof response !== 'undefined') {
             io.to(socket.id).emit('message', {
               message: response,

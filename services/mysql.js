@@ -79,5 +79,19 @@ module.exports = {
         }
       })
     })
+  },
+
+  getUserInfo(username) {
+    return new Promise((resolve, reject) => {
+      con.query(`SELECT avatar FROM user WHERE username=${mysql.escape(username)}`, (err, result) => {
+        if (err) {
+          logger.error(err)
+          return reject('Oops, something went wrong. Please try again later')
+        }
+        if (typeof result[0] !== "undefined") {
+          return resolve(result[0])
+        }
+      })
+    })
   }
 }
