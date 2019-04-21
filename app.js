@@ -15,6 +15,12 @@ var redisClient = require('./redis');
 var mysql = require('./services/mysql.js')
 const util = require('util')
 var logger = require('./services/logger.js')
+var redis = require('socket.io-redis')
+io.adapter(redis( {
+  port: process.env.REDIS_PORT,
+  host: process.env.REDIS_HOST,
+  password: process.env.REDIS_PASSWORD
+}))
 
 redisClient.on('connect', () => {
   logger.info('Redis client connected')
@@ -118,7 +124,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', (reason) => {
-    logger.info(`${socket.username} disconnected`)
+    logger.debug(`${socket.username} disconnected`)
     redisClient.del(socket.id);
     if (typeof socket.tide !== 'undefined' && typeof socket.username !== 'undefined') {
       mysql.removeUserFromAllTides(socket.username, socket.tide)
