@@ -15,18 +15,28 @@ con.connect(function(err) {
 module.exports = {
   addUserToTide(username, tideId) {
     return new Promise((resolve, reject) => {
-      con.query(`SELECT id FROM user WHERE username = ${mysql.escape(username)}`, (err, result) => {
+      con.query(`SELECT id FROM user WHERE username = ${mysql.escape(username)}`, (err, user) => {
         if (err) {
           logger.error(err)
           return reject(err)
         }
-        con.query(`INSERT INTO tide_participant (user_id, tide_id) VALUES (${mysql.escape(result[0].id)}, ${mysql.escape(tideId)})`, (err, result) => {
-          if (err) {
-            logger.error(err)
-            return reject(err)
-          }
-          resolve()
-        })
+        if (typeof user[0] !== "undefined") {
+          con.query(`SELECT id FROM tide_participant WHERE user_id = ${user[0].id} AND tide_id = ${tideId}`, (err, result) => {
+            if (err) {
+              logger.error(err)
+              return reject(err)
+            }
+            if (typeof result[0] === "undefined") {
+              con.query(`INSERT INTO tide_participant (user_id, tide_id) VALUES (${mysql.escape(user[0].id)}, ${mysql.escape(tideId)})`, (err, result) => {
+                if (err) {
+                  logger.error(err)
+                  return reject(err)
+                }
+                resolve()
+              })
+            }
+          })
+        }
       })
     });
   },
@@ -38,13 +48,15 @@ module.exports = {
           logger.error(err)
           return reject(err)
         }
-        con.query(`DELETE FROM tide_participant WHERE (user_id = ${mysql.escape(result[0].id)}) AND (tide_id = ${mysql.escape(tideId)})`, (err, result) => {
-          if (err) {
-            logger.error(err)
-            return reject(err)
-          }
-          resolve()
-        })
+        if (typeof result[0] !== "undefined") {
+          con.query(`DELETE FROM tide_participant WHERE (user_id = ${mysql.escape(result[0].id)}) AND (tide_id = ${mysql.escape(tideId)})`, (err, result) => {
+            if (err) {
+              logger.error(err)
+              return reject(err)
+            }
+            resolve()
+          })
+        }
       })
     })
   },
@@ -56,13 +68,15 @@ module.exports = {
           logger.error(err)
           return reject(err)
         }
-        con.query(`DELETE FROM tide_participant WHERE (user_id = ${mysql.escape(result[0].id)})`, (err, result) => {
-          if (err) {
-            logger.error(err)
-            return reject(err)
-          }
-          resolve()
-        })
+        if (typeof result[0] !== "undefined") {
+          con.query(`DELETE FROM tide_participant WHERE (user_id = ${mysql.escape(result[0].id)})`, (err, result) => {
+            if (err) {
+              logger.error(err)
+              return reject(err)
+            }
+            resolve()
+          })
+        }
       })
     })
   }
