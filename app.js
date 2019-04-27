@@ -180,11 +180,6 @@ var allowCrossDomain = function(req, res, next) {
 app.use(allowCrossDomain);
 app.use(express.json());
 
-app.use('/', function (req, res, next) {
-  res.status(200).json({success: true})
-});
-
-
 app.use('/socket/push', function (req, res, next) {
   let decoded;
   try {
@@ -194,6 +189,10 @@ app.use('/socket/push', function (req, res, next) {
     next(createError(409));
   }
   io.to(decoded.username).emit('notification', req.body.notification)
+  res.status(200).json({success: true})
+});
+
+app.use('/', function (req, res, next) {
   res.status(200).json({success: true})
 });
 
