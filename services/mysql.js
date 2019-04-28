@@ -1,16 +1,34 @@
 var mysql = require('mysql')
 var logger = require('./logger.js')
 
-var con = mysql.createConnection({
-  host: process.env.MYSQL_HOST,
-  user: process.env.MYSQL_USER,
-  password: process.env.MYSQL_PASSWORD,
-  database: process.env.MYSQL_DATABASE
-})
+var con
 
-con.connect(function(err) {
-  if (err) throw err
-});
+var handleDisconnect = () => {
+  con = mysql.createConnection({
+    host: process.env.MYSQL_HOST,
+    user: process.env.MYSQL_USER,
+    password: process.env.MYSQL_PASSWORD,
+    database: process.env.MYSQL_DATABASE
+  })
+
+  con.connect(function(err) {
+    if(err) {
+      logger.error('error when connecting to db:', err)
+      setTimeout(handleDisconnect, 2000)
+    }
+  })
+
+  con.on('error', function(err) {
+    logger.info('DB error', err)
+    if(err.code === 'PROTOCOL_CONNECTION_LOST') {
+      handleDisconnect()
+    } else {
+      throw err
+    }
+  })
+}
+
+handleDisconnect()
 
 module.exports = {
   addUserToTide(username, tideId) {
