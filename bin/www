@@ -5,4 +5,4 @@
  */
 
 var app = require('../app');
-var debug = require('debug')('notifications:server');
+var debug = require('debug')('server:chat-socket');
