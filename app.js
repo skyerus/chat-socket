@@ -8,7 +8,7 @@ var port = process.env.PORT || 80;
 var io = require('socket.io')(server, { path: '/socket/socket.io' });
 var dotenv = require('dotenv').config();
 var jwt = require('jsonwebtoken');
-var cli = require('./services/cli.js')(io);
+var commands = require('./services/commands.js')(io);
 var fs = require('fs');
 const cert = fs.readFileSync('./key/public.pem');
 var redisClient = require('./redis');
@@ -100,7 +100,7 @@ io.on('connection', (socket) => {
           type: 'italic'
         })
         let split = msg.split('!');
-        cli.handle(split[1], socket.id, socket.username, socket.tide).then((response) => {
+        commands.handle(split[1], socket.id, socket.username, socket.tide).then((response) => {
           if (typeof response !== 'undefined') {
             io.to(socket.id).emit('message', {
               message: response,
@@ -122,6 +122,26 @@ io.on('connection', (socket) => {
       })
     }
   });
+
+  socket.on('skip', (index) => {
+    if (socket.isAuthenticated) {
+      commands.skip(socket, index).then((res) => {
+        if (res !== undefined) {
+          io.to(socket.id).emit('message', {
+            message: res,
+            type: 'italic'
+          })
+        }
+      }).catch((err) => {
+        logger.error(err)
+      })
+    } else {
+      io.to(socket.id).emit('message', {
+        message: 'You must be logged in to contribute',
+        type: 'italic'
+      })
+    }
+  })
 
   socket.on('disconnect', (reason) => {
     logger.debug(`${socket.username} disconnected`)

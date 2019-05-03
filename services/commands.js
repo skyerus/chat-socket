@@ -10,8 +10,9 @@ axios.defaults.baseURL = process.env.RIPTIDES_API_HOST;
 
 module.exports = (ioInstance) => {
   io = ioInstance;
-  var cli = {};
-  cli.handle = (name, id, username, tide) => {
+  var commands = {};
+
+  commands.handle = (name, id, username, tide) => {
     let args = name.split(' ');
     name = args[0];
     args.splice(0, 1);
@@ -24,11 +25,36 @@ module.exports = (ioInstance) => {
     return callFunc(name, args);
   };
 
-  return cli;
+  commands.skip = (socket, index) => {
+    return new Promise((resolve, reject) => {
+      if (isNaN(index)) {
+        return resolve('Error')
+      }
+      redisClient.hget(socket.tide, 'queue', (err, queue) => {
+        queue = JSON.parse(queue)
+        if (queue === null || queue.length <= 1) {
+          return resolve('The queue is empty')
+        }
+        if (index > 0) {
+          queue.splice(index, 1)
+          redisClient.hset(socket.tide, 'queue', JSON.stringify(queue))
+          io.to(socket.tide).emit('queue', queue)
+          resolve()
+        } else {
+          queue.shift()
+          helpers.play(socket.tide, queue).then(() => {
+            redisClient.hset(socket.tide, 'queue', JSON.stringify(queue))
+          })
+        }
+      })
+    })
+  }
+
+  return commands;
 };
 
 function callFunc(name, args = []) {
-  let fn = cli[name];
+  let fn = commands[name];
 
   if(typeof fn !== 'function') {
     return new Promise((resolve, reject) => {
@@ -38,16 +64,16 @@ function callFunc(name, args = []) {
   return fn(args);
 }
 
-let cli = {};
+let commands = {};
 let helpers = {};
 
-cli.help = () => {
+commands.help = () => {
   return new Promise((resolve, reject) => {
     resolve('Available commands: ');
   });
 };
 
-cli.play = (args) => {
+commands.play = (args) => {
   return new Promise((resolve, reject) => {
     helpers.search(args.id, args.query).then((searchRes) => {
       redisClient.hget(args.tide, 'queue', (err, queue) => {
@@ -80,11 +106,11 @@ cli.play = (args) => {
   })
 }
 
-cli.queue = (args) => {
-  return cli.play(args)
+commands.queue = (args) => {
+  return commands.play(args)
 }
 
-cli.skip = (args) => {
+commands.skip = (args) => {
   return new Promise((resolve, reject) => {
     if (args.query.length > 1) {
       return resolve('!skip only accepts at most one parameter')
