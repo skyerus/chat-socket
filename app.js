@@ -92,29 +92,11 @@ io.on('connection', (socket) => {
 
   socket.on('message', (msg) => {
     if (socket.isAuthenticated) {
-      // Handle cmds such as !play
-      if (msg.charAt(0) === '!') {
-        io.to(socket.id).emit('message', {
-          username: socket.username,
-          message: msg,
-          type: 'italic'
-        })
-        let split = msg.split('!');
-        commands.handle(split[1], socket.id, socket.username, socket.tide).then((response) => {
-          if (typeof response !== 'undefined') {
-            io.to(socket.id).emit('message', {
-              message: response,
-              type: 'italic'
-            })
-          }
-        });
-      } else {
-        io.to(socket.tide).emit('message', {
-          username: socket.username,
-          message: msg,
-          type: 'standard'
-        })
-      }
+      io.to(socket.tide).emit('message', {
+        username: socket.username,
+        message: msg,
+        type: 'standard'
+      })
     } else {
       io.to(socket.id).emit('message', {
         message: 'You must be logged in to contribute',
@@ -122,6 +104,26 @@ io.on('connection', (socket) => {
       })
     }
   });
+
+  socket.on('play', (song) => {
+    if (socket.isAuthenticated) {
+      commands.play(socket, song).then((res) => {
+        if (res !== undefined) {
+          io.to(socket.id).emit('message', {
+            message: res,
+            type: 'italic'
+          })
+        }
+      }).catch((err) => {
+        logger.error(err)
+      })
+    } else {
+      io.to(socket.id).emit('message', {
+        message: 'You must be logged in to contribute',
+        type: 'italic'
+      })
+    }
+  })
 
   socket.on('skip', (index) => {
     if (socket.isAuthenticated) {

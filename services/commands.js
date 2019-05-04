@@ -12,19 +12,6 @@ module.exports = (ioInstance) => {
   io = ioInstance;
   var commands = {};
 
-  commands.handle = (name, id, username, tide) => {
-    let args = name.split(' ');
-    name = args[0];
-    args.splice(0, 1);
-    args = {
-      query: args,
-      id: id,
-      username: username,
-      tide: tide
-    };
-    return callFunc(name, args);
-  };
-
   commands.skip = (socket, index) => {
     return new Promise((resolve, reject) => {
       if (isNaN(index)) {
@@ -50,105 +37,51 @@ module.exports = (ioInstance) => {
     })
   }
 
+  commands.play = (socket, song) => {
+    return new Promise((resolve, reject) => {
+      if (typeof song !== 'string') {
+        return resolve('Unexpected parameter type')
+      }
+      helpers.search(socket.id, song).then((searchRes) => {
+        redisClient.hget(socket.tide, 'queue', (err, queue) => {
+          let empty = false;
+          if (queue === null) {
+            queue = []
+            empty = true
+          } else {
+            queue = JSON.parse(queue)
+          }
+          queue.push(searchRes)
+          mysql.getUserInfo(socket.username).then((user) => {
+            queue[queue.length - 1].user = {
+              username: socket.username,
+              avatar: user.avatar
+            }
+            redisClient.hset(socket.tide, 'queue', JSON.stringify(queue), () => {
+              if (empty) {
+                helpers.play(socket.tide, queue)
+              } else {
+                io.to(socket.tide).emit('queue', queue)
+                resolve();
+              }
+            });
+          })
+        })
+      }).catch((error) => {
+        resolve(error);
+      })
+    })
+  }
+
   return commands;
 };
 
-function callFunc(name, args = []) {
-  let fn = commands[name];
-
-  if(typeof fn !== 'function') {
-    return new Promise((resolve, reject) => {
-      resolve('Invalid command, enter !help to view some available commands');
-    })
-  }
-  return fn(args);
-}
-
-let commands = {};
 let helpers = {};
-
-commands.help = () => {
-  return new Promise((resolve, reject) => {
-    resolve('Available commands: ');
-  });
-};
-
-commands.play = (args) => {
-  return new Promise((resolve, reject) => {
-    helpers.search(args.id, args.query).then((searchRes) => {
-      redisClient.hget(args.tide, 'queue', (err, queue) => {
-        let empty = false;
-        if (queue === null) {
-          queue = []
-          empty = true
-        } else {
-          queue = JSON.parse(queue)
-        }
-        queue.push(searchRes)
-        mysql.getUserInfo(args.username).then((user) => {
-          queue[queue.length - 1].user = {
-            username: args.username,
-            avatar: user.avatar
-          }
-          redisClient.hset(args.tide, 'queue', JSON.stringify(queue), () => {
-            if (empty) {
-              helpers.play(args.tide, queue)
-            } else {
-              io.to(args.tide).emit('queue', queue)
-              resolve();
-            }
-          });
-        })
-      })
-    }).catch((error) => {
-      resolve(error);
-    })
-  })
-}
-
-commands.queue = (args) => {
-  return commands.play(args)
-}
-
-commands.skip = (args) => {
-  return new Promise((resolve, reject) => {
-    if (args.query.length > 1) {
-      return resolve('!skip only accepts at most one parameter')
-
-    } else if (args.query.length === 1) {
-      let int = parseInt(args.query[0])
-      if (isNaN(int)) {
-        return resolve('!skip only accepts an integer as a parameter')
-      }
-      redisClient.hget(args.tide, 'queue', (err, queue) => {
-        queue = JSON.parse(queue)
-        if (queue === null || queue.length === 0) {
-          return resolve('The queue is empty')
-        }
-        queue.splice(int, 1)
-        redisClient.hset(args.tide, 'queue', JSON.stringify(queue))
-        io.to(args.tide).emit('queue', queue)
-        resolve()
-      })
-    } else {
-      redisClient.hget(args.tide, 'queue', (err, queue) => {
-        queue = JSON.parse(queue)
-        if (queue === null || queue.length === 0) {
-          return resolve('There is nothing playing')
-        }
-        queue.shift()
-        helpers.play(args.tide, queue).then(() => {
-          redisClient.hset(args.tide, 'queue', JSON.stringify(queue))
-        })
-      })
-    }
-  })
-}
 
 helpers.search = (socketId, query) => {
   return new Promise((resolve, reject) => {
     query = {
-      q: query.join(' '),
+      q: query,
       type: 'track'
     };
     query = buildQuery.build(query);
