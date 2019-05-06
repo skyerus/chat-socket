@@ -9,13 +9,17 @@ pipeline {
         stage('Cloning Git') {
             steps {
                 sh 'rm -rf *'
-                sh 'git clone git@github.com:skyerus/chat-socket.git'
+                git (
+                        url: 'git@github.com:skyerus/chat-socket.git',
+                        credentialsId: 'github',
+                        branch: 'master'
+                    )
             }
         }
         stage('Building image') {
           steps{
             script {
-                dockerImage = docker.build("${env.registry}:build-${BUILD_NUMBER}", "--no-cache ./chat-socket")
+                dockerImage = docker.build("${env.registry}:build-${BUILD_NUMBER}", "--no-cache .")
             }
           }
         }
@@ -31,7 +35,7 @@ pipeline {
         stage('Remove Unused docker image & git repo') {
           steps{
             sh "docker rmi $registry:build-$BUILD_NUMBER"
-            sh "rm -Rf chat-socket"
+            sh "rm -Rf"
           }
         }
     }
