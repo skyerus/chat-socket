@@ -8,6 +8,7 @@ pipeline {
     stages {
         stage('Cloning Git') {
             steps {
+                sh 'rm -rf *'
                 sh 'git clone git@github.com:skyerus/chat-socket.git'
             }
         }
