@@ -26,6 +26,10 @@ redisClient.on('connect', () => {
   logger.info('Redis client connected')
 })
 
+redisClient.on('error', (err) => {
+  logger.error(`Redis error: ${err}`)
+})
+
 server.listen(port, () => {
   logger.info('Server listening at port %d', port);
 });
